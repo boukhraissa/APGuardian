@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetDefender - Simple WiFi Security Monitor</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --safe: #10b981;
+            --border: #334155;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+        
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        
+        .header-title h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .highlight {
+            color: var(--accent);
+        }
+        
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .status-indicator {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+            background-color: var(--safe);
+        }
+        
+        .status-indicator.active {
+            background-color: var(--safe);
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            flex: 1;
+        }
+        
+        @media (min-width: 768px) {
+            .main-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .fingerprint-panel {
+                grid-column: span 2;
+            }
+        }
+        
+        .panel {
+            background-color: var(--bg-secondary);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .panel-header h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        
+        .panel-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .btn {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 0.25rem;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-small {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        .panel-content {
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .data-table th, 
+        .data-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .data-table th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+        
+        .status-safe {
+            color: var(--safe);
+        }
+        
+        .status-warning {
+            color: var(--warning);
+        }
+        
+        .status-danger {
+            color: var(--danger);
+        }
+        
+        .log-entry {
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+        
+        .log-time {
+            color: var(--text-secondary);
+            margin-right: 0.5rem;
+        }
+        
+        .log-level {
+            display: inline-block;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+        }
+        
+        .log-level.info {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+        }
+        
+        .log-level.warning {
+            background-color: rgba(245, 158, 11, 0.2);
+            color: #fcd34d;
+        }
+        
+        .log-level.critical {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+        
+        .log-message {
+            color: var(--text-primary);
+        }
+        
+        .alert-item {
+            display: flex;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid transparent;
+        }
+        
+        .alert-item.critical {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left-color: var(--danger);
+        }
+        
+        .alert-item.warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left-color: var(--warning);
+        }
+        
+        .alert-details {
+            flex: 1;
+        }
+        
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .alert-desc {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .alert-meta {
+            display: flex;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .alert-time {
+            margin-right: 0.75rem;
+        }
+        
+        .alert-severity {
+            font-weight: 500;
+        }
+        
+        .alert-severity.critical {
+            color: var(--danger);
+        }
+        
+        .alert-severity.warning {
+            color: var(--warning);
+        }
+        
+        .fingerprint-container {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .fingerprint-visual {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background-color: rgba(15, 23, 42, 0.5);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+            margin: 0 auto;
+        }
+        
+        .fingerprint-dot {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            animation: pulse 3s infinite alternate;
+        }
+        
+        .fingerprint-line {
+            position: absolute;
+            background-color: var(--accent);
+            opacity: 0.4;
+            transform-origin: center;
+            animation: fade 4s infinite alternate;
+        }
+        
+        .network-stats {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .stat-item {
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            min-width: 100px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-top: 1px solid var(--border);
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .footer-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .filter-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .filter-button {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+        
+        .filter-button.active {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        
+        .error-message {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--danger);
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border-radius: 0.25rem;
+            color: var(--danger);
+            display: none;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0.3;
+            }
+        }
+        
+        @keyframes fade {
+            0% {
+                opacity: 0.1;
+            }
+            100% {
+                opacity: 0.5;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <h1>NET<span class="highlight">DEFENDER</span></h1>
+                <div class="subtitle">Simple WiFi Security Monitor v1.0</div>
+            </div>
+            <div class="header-status">
+                <div class="status-indicator active"></div>
+                <span>MONITORING</span>
+                <div class="timestamp" id="timestamp">--:--:--</div>
+            </div>
+        </header>
+
+        <!-- Error Message -->
+        <div class="error-message" id="error-alert"></div>
+
+        <!-- Main Grid -->
+        <main class="main-grid">
+            <!-- Client Connection Panel -->
+            <section class="panel client-panel">
+                <div class="panel-header">
+                    <h2>User Connections</h2>
+                    <div class="panel-controls">
+                        <button class="btn btn-small" id="refresh-users">Refresh</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <table class="data-table" id="user-connections">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source MAC</th>
+                                <th>Destination MAC</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- User connections will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Alert Panel -->
+            <section class="panel alert-panel">
+                <div class="panel-header">
+                    <h2>Security Alerts</h2>
+                    <div class="panel-controls">
+                        <div class="filter-container">
+                            <button class="filter-button active" data-filter="all">All</button>
+                            <button class="filter-button" data-filter="deauth">Deauth</button>
+                            <button class="filter-button" data-filter="evil-twin">Evil Twin</button>
+                        </div>
+                        <button class="btn btn-small" id="refresh-alerts">Refresh</button>
+                    </div>
+                </div>
+                <div class="panel-content" id="alert-container">
+                    <!-- Security alerts will be loaded here -->
+                </div>
+            </section>
+
+            <!-- Fingerprint Panel -->
+            <section class="panel fingerprint-panel">
+                <div class="panel-header">
+                    <h2>Network Fingerprint</h2>
+                    <div class="panel-controls">
+                        <button class="btn btn-small" id="refresh-network">Refresh</button>
+                        <div class="scan-status">Last scan: <span id="last-scan-time">Just now</span></div>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="fingerprint-container">
+                        <div class="fingerprint-visual" id="fingerprint-visual"></div>
+                    </div>
+                    <div class="network-stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Access Points</div>
+                            <div class="stat-value" id="ap-count">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Clients</div>
+                            <div class="stat-value" id="client-count">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Deauth Attacks</div>
+                            <div class="stat-value" id="deauth-count">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Evil Twin Attacks</div>
+                            <div class="stat-value" id="evil-twin-count">0</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-status">
+                <div class="status-indicator active"></div>
+                <span>System running // MONITORING ACTIVE</span>
+            </div>
+            <div class="footer-info">
+                <span>NetDefender v1.0</span>
+                <span>Last refresh: <span id="last-refresh">Never</span></span>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Global variables
+        let alertsData = [];
+        let infoData = [];
+
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById('timestamp').textContent = now.toTimeString().substring(0, 8);
+        }
+        setInterval(updateTimestamp, 1000);
+        updateTimestamp();
+
+        // Generate fingerprint visualization
+        function generateFingerprint() {
+            const container = document.getElementById('fingerprint-visual');
+            const size = 180;
+            const dotSize = 4;
+            const dotCount = 40;
+            
+            container.innerHTML = ''; // Clear container
+            
+            for (let i = 0; i < dotCount; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'fingerprint-dot';
+                dot.style.width = `${dotSize}px`;
+                dot.style.height = `${dotSize}px`;
+                
+                // Use sine/cosine to position dots in a circular pattern
+                const angle = (i / dotCount) * Math.PI * 2;
+                const distance = Math.random() * (size / 2 - dotSize);
+                const x = Math.cos(angle) * distance + (size / 2 - dotSize / 2);
+                const y = Math.sin(angle) * distance + (size / 2 - dotSize / 2);
+                
+                dot.style.left = `${x}px`;
+                dot.style.top = `${y}px`;
+                
+                // Random opacity and animation delay
+                dot.style.opacity = 0.3 + Math.random() * 0.7;
+                dot.style.animationDelay = `${Math.random() * 5}s`;
+                
+                container.appendChild(dot);
+            }
+            
+            // Add connecting lines
+            for (let i = 0; i < 10; i++) {
+                const line = document.createElement('div');
+                line.className = 'fingerprint-line';
+                
+                const angle = Math.random() * Math.PI * 2;
+                const length = 30 + Math.random() * 50;
+                const thickness = 1 + Math.random();
+                
+                line.style.width = `${length}px`;
+                line.style.height = `${thickness}px`;
+                
+                const x = Math.cos(angle) * (Math.random() * size / 4) + (size / 2);
+                const y = Math.sin(angle) * (Math.random() * size / 4) + (size / 2);
+                
+                line.style.left = `${x - length / 2}px`;
+                line.style.top = `${y}px`;
+                line.style.transform = `rotate(${angle}rad)`;
+                line.style.opacity = 0.3 + Math.random() * 0.4;
+                line.style.animationDelay = `${Math.random() * 5}s`;
+                
+                container.appendChild(line);
+            }
+        }
+
+        // Load user connections from info logs API
+        async function loadUserConnections() {
+            try {
+                const response = await fetch('/api/logs/info');
+                const data = await response.json();
+                infoData = data; // Store data globally
+                
+                const table = document.getElementById('user-connections');
+                const tbody = table.querySelector('tbody');
+                tbody.innerHTML = '';
+                
+                // Filter for connection events and limit to most recent 10
+                const connections = data
+                    .filter(entry => entry.message && entry.message.toLowerCase().includes('connect'))
+                    .slice(-10);
+                
+                if (connections.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="4" style="text-align: center;">No connection logs found</td>';
+                    tbody.appendChild(row);
+                } else {
+                    connections.forEach(conn => {
+                        // Extract MAC addresses if available
+                        const sourceMac = conn.source || 'Unknown';
+                        const destMac = conn.target || 'Unknown';
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${conn.timestamp}</td>
+                            <td>${sourceMac}</td>
+                            <td>${destMac}</td>
+                            <td><span class="status-safe">Connected</span></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+                
+                // Update client count in network stats
+                document.getElementById('client-count').textContent = connections.length;
+            } catch (error) {
+                console.error('Error loading user connections:', error);
+                displayError('Failed to load user connections');
+            }
+        }
+
+        // Load security alerts from alerts API
+        async function loadSecurityAlerts(filter = 'all') {
+            try {
+                // Only refetch if we don't have data or forced refresh
+                if (!alertsData.length || filter === 'refresh') {
+                    const response = await fetch('/api/logs/alerts');
+                    alertsData = await response.json();
+                    filter = 'all'; // Reset to all after refresh
+                }
+                
+                const container = document.getElementById('alert-container');
+                container.innerHTML = '';
+                
+                // Filter alerts by type if needed
+                let filteredAlerts = [...alertsData];
+                if (filter === 'deauth') {
+                    filteredAlerts = alertsData.filter(alert => 
+                        alert.message && alert.message.toLowerCase().includes('deauth'));
+                } else if (filter === 'evil-twin') {
+                    filteredAlerts = alertsData.filter(alert => 
+                        alert.message && alert.message.toLowerCase().includes('evil twin'));
+                }
+                
+                // Get most recent 5 alerts
+                const recentAlerts = filteredAlerts.slice(-5);
+                
+                if (recentAlerts.length === 0) {
+                    container.innerHTML = '<div class="alert-item">No alerts found</div>';
+                } else {
+                    recentAlerts.forEach(alert => {
+                        // Determine alert type
+                        const isDeauth = alert.message && alert.message.toLowerCase().includes('deauth');
+                        const isEvilTwin = alert.message && alert.message.toLowerCase().includes('evil twin');
+                        
+                        // Create alert HTML
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = `alert-item ${alert.level === 'CRITICAL' ? 'critical' : 'warning'}`;
+                        
+                        // Set alert title based on type
+                        let alertTitle = 'Security Alert';
+                        if (isDeauth) alertTitle = 'Deauthentication Attack';
+                        if (isEvilTwin) alertTitle = 'Evil Twin Attack';
+                        
+                        alertDiv.innerHTML = `
+                            <div class="alert-details">
+                                <div class="alert-title">${alertTitle}</div>
+                                <div class="alert-desc">${alert.message}</div>
+                                <div class="alert-meta">
+                                    <span class="alert-time">${alert.timestamp}</span>
+                                    <span class="alert-severity ${alert.level === 'CRITICAL' ? 'critical' : 'warning'}">${alert.level}</span>
+                                </div>
+                            </div>
+                        `;
+                        
+                        container.appendChild(alertDiv);
+                    });
+                }
+                
+                // Update filter buttons
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                document.querySelector(`.filter-button[data-filter="${filter === 'refresh' ? 'all' : filter}"]`)?.classList.add('active');
+            } catch (error) {
+                console.error('Error loading security alerts:', error);
+                displayError('Failed to load security alerts');
+            }
+        }
+
+        // Load network and attack statistics
+        async function loadNetworkInfo() {
+            try {
+                const response = await fetch('/api/attacks/stats');
+                const stats = await response.json();
+                
+                // Update statistics
+                document.getElementById('ap-count').textContent = stats.unique_sources ? stats.unique_sources.length : '0';
+                document.getElementById('deauth-count').textContent = stats.deauth_attacks || '0';
+                document.getElementById('evil-twin-count').textContent = stats.evil_twin_attacks || '0';
+                
+                // Update last scan time
+                const now = new Date();
+                const timeStr = now.toTimeString().substring(0, 8);
+                document.getElementById('last-scan-time').textContent = timeStr;
+                document.getElementById('last-refresh').textContent = timeStr;
+                
+                // Regenerate fingerprint for visual feedback
+                generateFingerprint();
+            } catch (error) {
+                console.error('Error loading network info:', error);
+                displayError('Failed to load network information');
+            }
+        }
+
+        // Display error message
+        function displayError(message) {
+            const errorEl = document.getElementById('error-alert');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Helper function to refresh all data
+        function refreshAllData() {
+            loadUserConnections();
+            loadSecurityAlerts('refresh');
+            loadNetworkInfo();
+        }
+
+        // Add event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Generate initial fingerprint
+            generateFingerprint();
+            
+            // Set up refresh button handlers
+            document.getElementById('refresh-users').addEventListener('click', loadUserConnections);
+            document.getElementById('refresh-alerts').addEventListener('click', () => loadSecurityAlerts('refresh'));
+            document.getElementById('refresh-network').addEventListener('click', loadNetworkInfo);
+            
+            // Set up filter buttons
+            document.querySelectorAll('.filter-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const filter = this.getAttribute('data-filter');
+                    loadSecurityAlerts(filter);
+                });
+            });
+            
+            // Initial data load
+            refreshAllData();
+            
+            // Set up automatic refresh
+            setInterval(refreshAllData, 30000); // Refresh every 30 seconds
+        });
+    </script>
+</body>
+</html>
