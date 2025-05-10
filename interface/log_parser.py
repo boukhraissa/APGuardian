@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
+CLIENTS_LOG_PATH = '/home/kali/Desktop/project_active/detector/logs/active_clients.log'
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -152,81 +153,58 @@ def get_info_logs(max_entries: int = 100, force_refresh: bool = False) -> List[D
     return info_logs[:max_entries]
 
 def get_active_connections():
-    """Get active connections based on recent log entries."""
-    connections = []
-    seen_ips = set()
-
-    # Use the info log instead of hardcoded path
-    log_file = INFO_LOG 
+    """
+    Returns information about currently active client connections.
     
-    # Set time limit to only show recent connections
-    time_limit = datetime.now() - timedelta(minutes=5)  # recent 5 mins
-    
-    # Make sure log file exists before trying to read it
-    if not os.path.exists(log_file):
-        logger.warning(f"Log file not found: {log_file}")
-        open(log_file, 'a').close()  # Create empty file
-        return connections
-
+    Returns:
+        list: A list of dictionaries containing client connection information.
+              Each dictionary has:
+              - mac: Client's MAC address
+              - first_seen: When the client was first detected
+              - last_seen: Most recent client activity time
+              - rssi: Signal strength in dBm
+              - status: Connection status (Connected/Disconnected)
+    """
     try:
-        with open(log_file, "r") as f:
-            lines = f.readlines()
+        clients_log_path = CLIENTS_LOG_PATH  # Make sure this is defined at the top of the file
+
+        # Check if the clients log file exists
+        if not os.path.exists(clients_log_path):
+            logging.warning(f"Clients log file not found: {clients_log_path}")
+            return []
             
-        for line in reversed(lines):  # Start from most recent
-            if "CONNECT" in line:
-                # Try to extract timestamp and IP
-                try:
-                    # Example format: "[2025-05-08 15:12:03] CONNECTED: 192.168.1.5"
-                    # Extract timestamp
-                    timestamp_match = re.search(r'\[(.*?)\]', line)
-                    if timestamp_match:
-                        timestamp_str = timestamp_match.group(1)
-                        timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        
-                        if timestamp < time_limit:
-                            break  # Stop processing older entries
-                        
-                        # Try to extract IP
-                        ip_match = re.search(r'(?:CONNECTED|DISCONNECTED)[:\s]+(\d+\.\d+\.\d+\.\d+|(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})', line)
-                        if ip_match:
-                            client = ip_match.group(1)
-                            
-                            # For CONNECTED events
-                            if "CONNECTED" in line and client not in seen_ips:
-                                seen_ips.add(client)
-                                connections.append({
-                                    "ip": client,
-                                    "timestamp": timestamp_str,
-                                    "status": "connected"
-                                })
-                            
-                            # For DISCONNECTED events
-                            elif "DISCONNECTED" in line and client in seen_ips:
-                                seen_ips.remove(client)
-                                # Optional: Can mark as disconnected if needed
+        # Read the clients data from the JSON file
+        with open(clients_log_path, 'r') as f:
+            clients_data = json.load(f)
+            
+        # Convert to the format expected by the frontend
+        formatted_clients = []
+        for client in clients_data:
+            # Calculate how long ago the client was last seen
+            try:
+                last_seen_time = datetime.fromisoformat(client['last_seen'])
+                current_time = datetime.now()
+                time_diff = (current_time - last_seen_time).total_seconds()
                 
-                except Exception as e:
-                    logger.error(f"Error parsing connection entry: {e}")
-                    continue
-    except Exception as e:
-        logger.error(f"Error reading connection log: {e}")
-        
-    # If no connections found from logs, provide a sample for testing
-    if not connections and os.environ.get('DEBUG'):
-        connections = [
-            {
-                "ip": "00:11:22:33:44:55",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "connected"
-            },
-            {
-                "ip": "192.168.1.5",
-                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "connected"
+                # If last seen more than 5 minutes ago, consider disconnected
+                status = "Connected" if time_diff < 300 else "Disconnected"
+            except (ValueError, TypeError):
+                # If there's an issue with time calculation, default to Connected
+                status = "Connected"
+                
+            formatted_client = {
+                'mac': client['mac'],
+                'first_seen': client['first_seen'],
+                'last_seen': client['last_seen'],
+                'rssi': client['rssi'] if isinstance(client['rssi'], str) else f"{client['rssi']} dBm",
+                'status': status
             }
-        ]
-        
-    return connections
+            formatted_clients.append(formatted_client)
+            
+        return formatted_clients
+    except Exception as e:
+        logging.error(f"Error getting active connections: {str(e)}")
+        return []
 
 def refresh_log_cache(log_type: str = "all") -> None:
     """Update the log cache with latest log entries."""

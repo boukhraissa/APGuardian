@@ -12,6 +12,8 @@ from logging import FileHandler, StreamHandler, Formatter, Filter
 from datetime import datetime
 import threading
 import statistics  # Added for mean calculation
+import json
+import os
 
 
 
@@ -26,18 +28,19 @@ class AlertFilter(logging.Filter):
     def filter(self, record):
         return record.levelno >= logging.WARNING  # WARNING and above
 
+                
 # Clear any existing handlers
 root_logger = logging.getLogger()
 root_logger.handlers.clear()
 
 # Info handler (only INFO level)
-info_handler = FileHandler('/home/kali/Desktop/project/detector/logs/info.log')
+info_handler = FileHandler('/home/kali/Desktop/project_active/detector/logs/info.log')
 info_handler.setLevel(logging.INFO)
 info_handler.addFilter(InfoFilter())
 info_handler.setFormatter(Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
 # Alert handler (WARNING and above)
-alert_handler = FileHandler('/home/kali/Desktop/project/detector/logs/alerts.log')
+alert_handler = FileHandler('/home/kali/Desktop/project_active/detector/logs/alerts.log')
 alert_handler.setLevel(logging.WARNING)
 alert_handler.addFilter(AlertFilter())
 alert_handler.setFormatter(Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -56,8 +59,9 @@ root_logger.addHandler(console_handler)
 # ===== CONFIGURATION =====
 YOUR_AP_BSSID = "40:AE:30:2B:E8:0E"  # CHANGE TO YOUR AP's REAL BSSID
 AP_SSID = "TP-Link_E80E"
-YOUR_AP_CHANNEL = 10               # Your AP's channel
-INTERFACE = "wlan0"        # Your monitor interface
+YOUR_AP_CHANNEL =  3         # Your AP's channel
+INTERFACE = "wlan0mon"        # Your monitor interface
+CLIENTS_LOG_PATH = "/home/kali/Desktop/project_active/detector/logs/active_clients.log"
 # =========================
 
 # Detection thresholds
@@ -111,13 +115,19 @@ class APGuardian:
         self.ap_ssid = AP_SSID
         self.ap_bssid = YOUR_AP_BSSID
         self.ap_mac = YOUR_AP_BSSID
-        self.connected_clients = set()
+        
+        # Updated client data structure with status field
+        self.connected_clients = []
+        
         # Attack detectors
         self.fingerprint_learned = False
         self.real_fingerprint = {}
         self.deauth_counter = defaultdict(int)
         self.probe_counter = defaultdict(int)
         self.client_flood_detector = deque(maxlen=60)
+        
+        # Last time clients were saved to file
+        self.last_clients_save = time.time()
         
         # Ensure we're on the right channel
         self.set_monitor_channel()
@@ -250,7 +260,7 @@ class APGuardian:
 
     def detect_deauth_attack(self, pkt):
         """Enhanced deauth detection combining both approaches"""
-        if not pkt.haslayer(Dot11Deauth) :
+        if not pkt.haslayer(Dot11Deauth):
             return
 
         dot11 = pkt[Dot11]
@@ -269,7 +279,7 @@ class APGuardian:
             attacker_mac = ta_mac
         # Rule 1: Ignore common non-malicious reason codes
         if reason in [1, 3, 4, 6]:  # 1=Unspecified, 3=STA leaving, 4=Inactivity
-            logging.debug(f"Ignoring normal deauth (code {reason}) from {src}")
+            logging.debug(f"Ignoring normal deauth (code {reason}) from {claimed_src}")
             return
 
         # Update tracking metrics
@@ -286,62 +296,182 @@ class APGuardian:
             )
 
         # Rule 3: Threshold detection
-        if self.deauth_counter[claimed_src] == DEAUTH_THRESHOLD:  # Fixed variable name
+        if self.deauth_counter[claimed_src] == DEAUTH_THRESHOLD:
             logging.critical(
                 f"DEAUTH ATTACK DETECTED!\n"
                 f"  Claimed source: {claimed_src}\n"
-                f"  Atacker mac : {attacker_mac}\n"
+                f"  Attacker mac: {attacker_mac}\n"
                 f"  Target: {dst_mac}"
             )
 
+    def find_client_by_mac(self, mac):
+        """Helper method to find a client by MAC address in the new data structure"""
+        for client in self.connected_clients:
+            if client['mac'] == mac:
+                return client
+        return None
+
     def monitor_clients(self, pkt):
-        """Monitor clients connecting to and disconnecting from the known AP, with detailed info."""
+        """
+        Enhanced monitor_clients method that accurately tracks client connections
+        by analyzing authentication state and specific frame types.
+        """
         if not pkt.haslayer(Dot11):
             return
-
+            
+        # Basic validation
+        if not hasattr(pkt, 'addr1') or not hasattr(pkt, 'addr2'):
+            return
+            
         src = pkt.addr2
         dst = pkt.addr1
-
+        
         # Ensure src and dst are valid before using .lower()
         if not src or not dst:
             return
+            
         # Only track frames involving our AP
         if self.ap_mac.lower() not in [src.lower(), dst.lower()]:
             return
-
-        frame_type = None
-        rssi = None
-
-        # Only track frames involving our AP
-        if self.ap_mac.lower() not in [src.lower(), dst.lower()]:
-            return
-
+            
         # Get RSSI if available
+        rssi = None
         if pkt.haslayer(RadioTap) and hasattr(pkt[RadioTap], 'dBm_AntSignal'):
             rssi = pkt[RadioTap].dBm_AntSignal
-
-        # Detect client login (Data frame)
-        if pkt.type == 2:  # Data frame
-            client_mac = src if dst.lower() == self.ap_mac.lower() else dst
-            frame_type = "DATA"
-
-            if client_mac not in self.connected_clients:
-                self.connected_clients.add(client_mac)
-                self._log_client_event(client_mac, "CONNECTED", rssi, src, dst, frame_type)
-
-        # Detect logout (Deauth or Disassoc)
-        elif pkt.haslayer(Dot11Deauth) or pkt.haslayer(Dot11Disas):
-            client_mac = src if dst.lower() == self.ap_mac.lower() else dst
-            frame_type = "DEAUTH" if pkt.haslayer(Dot11Deauth) else "DISASSOC"
-
-            if client_mac in self.connected_clients:
-                self.connected_clients.remove(client_mac)
-                self._log_client_event(client_mac, "DISCONNECTED", rssi, src, dst, frame_type)
-
-    def _log_client_event(self, mac, event, rssi, src, dst, frame_type):
-        """Log client events to info.log and console"""
-        rssi_str = f"{rssi} dBm" if rssi is not None else "N/A"
+            rssi_str = f"{rssi} dBm" if rssi is not None else "N/A"
+        else:
+            rssi_str = "N/A"
         
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # CASE 1: Track Authentication and Association
+        if pkt.haslayer(Dot11Auth):
+            if dst.lower() == self.ap_mac.lower():  # Client -> AP
+                client_mac = src.lower()
+                if pkt[Dot11Auth].status == 0:  # Successful authentication
+                    self._update_client_state(client_mac, current_time, rssi_str, "Authenticated", "AUTH")
+        
+        elif pkt.haslayer(Dot11AssoResp):
+            if src.lower() == self.ap_mac.lower():  # AP -> Client
+                client_mac = dst.lower()
+                if pkt[Dot11AssoResp].status == 0:  # Successful association
+                    self._update_client_state(client_mac, current_time, rssi_str, "Associated", "ASSOC")
+        
+        # CASE 2: Data frames confirm an established connection
+        elif pkt.type == 2:  # Data frame
+            # Skip management frames (type 0) and control frames (type 1)
+            # Only consider data frames from/to AP that have a non-empty payload
+            if pkt.haslayer(Dot11) and pkt.type == 2 and Raw in pkt and len(pkt[Raw].load) > 0:
+                if src.lower() == self.ap_mac.lower():
+                    client_mac = dst.lower()
+                elif dst.lower() == self.ap_mac.lower():
+                    client_mac = src.lower()
+                else:
+                    return  # Not AP related
+                    
+                # Skip if it's AP-to-AP communication
+                if client_mac == self.ap_mac.lower():
+                    return
+                    
+                # If we see actual data flowing, client is definitely connected
+                self._update_client_state(client_mac, current_time, rssi_str, "Connected", "DATA")
+                
+        # CASE 3: Detect disconnection
+        elif pkt.haslayer(Dot11Deauth) or pkt.haslayer(Dot11Disas):
+            frame_type = "DEAUTH" if pkt.haslayer(Dot11Deauth) else "DISASSOC"
+            
+            # Handle AP->Client disconnection
+            if src.lower() == self.ap_mac.lower():
+                client_mac = dst.lower()
+            # Handle Client->AP disconnection  
+            elif dst.lower() == self.ap_mac.lower():
+                client_mac = src.lower()
+            else:
+                return  # Not AP related
+                
+            # Skip AP-to-AP communication
+            if client_mac == self.ap_mac.lower():
+                return
+                
+            existing_client = self.find_client_by_mac(client_mac)
+            if existing_client:
+                existing_client['status'] = "Disconnected"
+                existing_client['last_seen'] = current_time
+                self._log_client_event(client_mac, "DISCONNECTED", rssi_str, src, dst, frame_type)
+                
+                # Remove the disconnected client from the active clients list
+                self.remove_client_from_list(client_mac)
+
+                
+        # CASE 4: Maintain connection state based on periodic messages
+        # Null frames, QoS Null frames, and other control frames that show connection maintenance
+        elif pkt.type == 1:  # Control frame
+            # Subtype 12 = QoS Null; subtype 4 = Null function (non-QoS)
+            if pkt.subtype in [4, 12]:  # Null or QoS Null function frame
+                if src.lower() == self.ap_mac.lower():
+                    client_mac = dst.lower()
+                elif dst.lower() == self.ap_mac.lower():
+                    client_mac = src.lower()
+                else:
+                    return
+
+                # Skip AP-to-AP communication
+                if client_mac == self.ap_mac.lower():
+                    return
+
+                # Update last_seen but don't change status
+                existing_client = self.find_client_by_mac(client_mac)
+                if existing_client and existing_client['status'] == "Connected":
+                    existing_client['last_seen'] = current_time
+                    if rssi is not None:
+                        existing_client['rssi'] = rssi_str
+    
+    def remove_client_from_list(self, client_mac):
+        """
+        Remove a client from the list of active clients based on the MAC address.
+        """
+        self.connected_clients = [client for client in self.connected_clients if client['mac'] != client_mac]
+
+
+    def _update_client_state(self, client_mac, current_time, rssi_str, status, frame_type):
+        """
+        Helper method to update client state based on observed frames
+        """
+        existing_client = self.find_client_by_mac(client_mac)
+        
+        if not existing_client:
+            # Add new client
+            new_client = {
+                'mac': client_mac,
+                'first_seen': current_time,
+                'last_seen': current_time,
+                'rssi': rssi_str,
+                'status': status
+            }
+            self.connected_clients.append(new_client)
+            self._log_client_event(client_mac, f"NEW {status}", rssi_str, "", "", frame_type)
+        else:
+            # Update existing client
+            existing_client['last_seen'] = current_time
+            if rssi_str != "N/A":
+                existing_client['rssi'] = rssi_str
+                
+            # Only upgrade status (Authenticated -> Associated -> Connected)
+            status_hierarchy = {
+                "Disconnected": 0,
+                "Authenticated": 1,
+                "Associated": 2,
+                "Connected": 3
+            }
+            
+            current_status = existing_client['status']
+            if status_hierarchy.get(status, 0) > status_hierarchy.get(current_status, 0):
+                existing_client['status'] = status
+                self._log_client_event(client_mac, f"STATUS CHANGE: {current_status} -> {status}", 
+                                    rssi_str, "", "", frame_type)
+                                    
+    def _log_client_event(self, mac, event, rssi_str, src, dst, frame_type):
+        """Log client events to info.log and console"""
         # This will appear in info.log and console only
         logging.info(
             f"CLIENT {event.upper()} | "
@@ -349,8 +479,21 @@ class APGuardian:
             f"RSSI: {rssi_str} | "
             f"Frame: {frame_type} | "
             f"Path: {src} → {dst}"
-        ) 
-
+        )
+        
+    def save_clients_to_file(self):
+        """Save the current state of connected clients to a file"""
+        try:
+            # Format is already the list of dictionaries as requested
+            json_data = json.dumps(self.connected_clients, indent=2)
+            
+            # Write to file
+            with open(CLIENTS_LOG_PATH, 'w') as f:
+                f.write(json_data)
+                
+            logging.debug(f"Saved {len(self.connected_clients)} clients to {CLIENTS_LOG_PATH}")
+        except Exception as e:
+            logging.error(f"Failed to save clients to file: {str(e)}")
 
     def packet_handler(self, pkt):
         """Main packet processing function"""
@@ -361,6 +504,12 @@ class APGuardian:
             if time.time() - self.last_channel_check > 300:
                 self.set_monitor_channel()
                 self.last_channel_check = time.time()
+                
+            # Check if it's time to save client data (every second)
+            current_time = time.time()
+            if current_time - self.last_clients_save >= 1.0:
+                self.save_clients_to_file()
+                self.last_clients_save = current_time
 
             # Run all detectors
             self.detect_rogue_ap(pkt)
@@ -374,15 +523,12 @@ class APGuardian:
 
 
 def enable_monitor_mode(interface):
-
-    #Enables monitor mode on the specified wireless interface.
+    """Enables monitor mode on the specified wireless interface."""
     try:
-        subprocess.run(["sudo", "ip", "link", "set", interface, "down"], check=True)
-        subprocess.run(["sudo", "iw", interface, "set", "monitor", "control"], check=True)
-        subprocess.run(["sudo", "ip", "link", "set", interface, "up"], check=True)
-
+        subprocess.run(["sudo", "ifconfig", interface, "down"], check=True)
+        subprocess.run(["sudo","iwconfig", interface, "mode", "monitor"], check=True)
+        subprocess.run(["sudo", "ifconfig", interface, "up"], check=True)
         logging.info(f"Interface {interface} set to monitor mode successfully.")
-
         return True
     except subprocess.CalledProcessError as e:
         logging.error(f"[!] Failed to set {interface} to monitor mode: {e}")

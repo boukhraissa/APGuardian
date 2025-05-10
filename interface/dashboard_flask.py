@@ -65,8 +65,13 @@ def api_info():
 
 @app.route('/api/connections/active')
 def api_active_connections():
-    """API endpoint to get only currently active connections."""
-    return jsonify(get_active_connections())
+
+    try:
+        connections = get_active_connections()
+        return jsonify(connections)
+    except Exception as e:
+        app.logger.error(f"Error in active connections API: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/attacks/latest')
 def api_latest_attacks():
@@ -102,4 +107,4 @@ if __name__ == '__main__':
     print(f"Log files paths:")
     print(f"- Alerts log: {alerts_log} (exists: {os.path.exists(alerts_log)})")
     print(f"- Info log: {info_log} (exists: {os.path.exists(info_log)})")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=4444, debug=True)

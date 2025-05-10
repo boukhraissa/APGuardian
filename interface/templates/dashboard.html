@@ -411,7 +411,7 @@
         <!-- Header -->
         <header class="header">
             <div class="header-title">
-                <h1>NET<span class="highlight">DEFENDER</span></h1>
+                <h1>AP<span class="highlight">Guardian</span></h1>
                 <div class="subtitle">Simple WiFi Security Monitor v1.0</div>
             </div>
             <div class="header-status">
@@ -439,8 +439,8 @@
                         <thead>
                             <tr>
                                 <th>Time</th>
-                                <th>Source MAC</th>
-                                <th>Destination MAC</th>
+                                <th>MAC</th>
+                                <th>Signal Strenght</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
@@ -536,7 +536,7 @@
             const size = 180;
             const dotSize = 4;
             const dotCount = 40;
-            
+
             container.innerHTML = ''; // Clear container
             
             for (let i = 0; i < dotCount; i++) {
@@ -589,47 +589,42 @@
         // Load user connections from info logs API
         async function loadUserConnections() {
             try {
-                const response = await fetch('/api/logs/info');
-                const data = await response.json();
-                infoData = data; // Store data globally
-                
+                const response = await fetch('/api/connections/active');
+                const connections = await response.json();
+
                 const table = document.getElementById('user-connections');
                 const tbody = table.querySelector('tbody');
                 tbody.innerHTML = '';
-                
-                // Filter for connection events and limit to most recent 10
-                const connections = data
-                    .filter(entry => entry.message && entry.message.toLowerCase().includes('connect'))
-                    .slice(-10);
-                
-                if (connections.length === 0) {
+
+                // Filter only connected clients
+                const activeClients = connections.filter(conn => conn.status === 'Connected');
+
+                if (activeClients.length === 0) {
                     const row = document.createElement('tr');
-                    row.innerHTML = '<td colspan="4" style="text-align: center;">No connection logs found</td>';
+                    row.innerHTML = `<td colspan="4">No active connections found</td>`;
                     tbody.appendChild(row);
                 } else {
-                    connections.forEach(conn => {
-                        // Extract MAC addresses if available
-                        const sourceMac = conn.source || 'Unknown';
-                        const destMac = conn.target || 'Unknown';
-                        
+                    activeClients.forEach(conn => {
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                            <td>${conn.timestamp}</td>
-                            <td>${sourceMac}</td>
-                            <td>${destMac}</td>
-                            <td><span class="status-safe">Connected</span></td>
+                            <td>${conn.last_seen}</td>
+                            <td>${conn.mac}</td>
+                            <td>${conn.rssi}</td>
+                            <td><span class="status-safe">${conn.status}</span></td>
                         `;
                         tbody.appendChild(row);
                     });
                 }
-                
-                // Update client count in network stats
-                document.getElementById('client-count').textContent = connections.length;
+
+                // Update client count
+                document.getElementById('client-count').textContent = activeClients.length;
+
             } catch (error) {
                 console.error('Error loading user connections:', error);
                 displayError('Failed to load user connections');
             }
         }
+
 
         // Load security alerts from alerts API
         async function loadSecurityAlerts(filter = 'all') {
@@ -767,7 +762,7 @@
             refreshAllData();
             
             // Set up automatic refresh
-            setInterval(refreshAllData, 30000); // Refresh every 30 seconds
+            setInterval(refreshAllData, 1000); // Refresh every second
         });
     </script>
 </body>

@@ -2,8 +2,8 @@ from scapy.all import *
 
 # Real test attacker — keep your real MAC at radio layer
 target_ap = "40:ae:30:2b:e8:0e"    # Spoofed AP MAC
-target_client = "01:00:5e:00:00:fb"
-interface = "wlan0"
+target_client = "56:78:63:23:53:63"
+interface = "wlan0mon"
 
 # Spoofed deauth packet (addr2 = AP MAC), but radiotap reveals real MAC
 def spoofed_deauth(ap_mac, client_mac):
