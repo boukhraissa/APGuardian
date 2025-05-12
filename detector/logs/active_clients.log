@@ -1,9 +1,11 @@
 [
   {
-    "mac": "d4:ae:05:90:db:2f",
-    "first_seen": "2025-05-10 16:18:37",
-    "last_seen": "2025-05-10 16:21:12",
-    "rssi": "-34 dBm",
-    "status": "Associated"
+    "mac": "56:78:63:23:53:63",
+    "first_seen": "2025-05-12 17:57:52",
+    "last_seen": "2025-05-12 17:57:52",
+    "rssi": "-42 dBm",
+    "status": "Associated",
+    "whitelisted": true,
+    "is_new": false
   }
 ]

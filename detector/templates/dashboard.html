@@ -384,6 +384,15 @@
             color: var(--danger);
             display: none;
         }
+        .status-safe {
+            color: green;
+            font-weight: bold;
+        }
+
+        .status-suspicious {
+            color: red;
+            font-weight: bold;
+        }
         
         @keyframes pulse {
             0% {
@@ -411,7 +420,7 @@
         <!-- Header -->
         <header class="header">
             <div class="header-title">
-                <h1>AP<span class="highlight">Guardian</span></h1>
+                <h1>AP<span class="highlight">GUARDIAN</span></h1>
                 <div class="subtitle">Simple WiFi Security Monitor v1.0</div>
             </div>
             <div class="header-status">
@@ -441,7 +450,7 @@
                                 <th>Time</th>
                                 <th>MAC</th>
                                 <th>Signal Strenght</th>
-                                <th>Status</th>
+                                <th>status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -511,7 +520,7 @@
                 <span>System running // MONITORING ACTIVE</span>
             </div>
             <div class="footer-info">
-                <span>NetDefender v1.0</span>
+                <span>APGuardian v1.0</span>
                 <span>Last refresh: <span id="last-refresh">Never</span></span>
             </div>
         </footer>
@@ -519,6 +528,7 @@
 
     <script>
         // Global variables
+        let currentFilter = 'all';
         let alertsData = [];
         let infoData = [];
 
@@ -529,7 +539,46 @@
         }
         setInterval(updateTimestamp, 1000);
         updateTimestamp();
-
+        
+        function handlePcapDownload(event, filename) {
+            // Prevent the default anchor behavior
+            event.preventDefault();
+            
+            // Show loading state on the button
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = "Downloading...";
+            btn.disabled = true;
+            
+            // First check if the file exists
+            fetch(`/api/pcap/list`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.files && data.files.includes(filename)) {
+                        // File exists, proceed with download
+                        window.location.href = `/api/pcap/download/${filename}`;
+                        setTimeout(() => {
+                            // Reset button after a delay
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }, 2000);
+                    } else {
+                        // File doesn't exist
+                        displayError(`PCAP file ${filename} not found. It may take up to 10 seconds after an attack to generate.`);
+                        btn.textContent = "Not Available";
+                        setTimeout(() => {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }, 3000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking PCAP file:', error);
+                    displayError('Could not verify PCAP file availability');
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                });
+        }
         // Generate fingerprint visualization
         function generateFingerprint() {
             const container = document.getElementById('fingerprint-visual');
@@ -587,53 +636,90 @@
         }
 
         // Load user connections from info logs API
+    
         async function loadUserConnections() {
             try {
                 const response = await fetch('/api/connections/active');
                 const connections = await response.json();
-
                 const table = document.getElementById('user-connections');
                 const tbody = table.querySelector('tbody');
                 tbody.innerHTML = '';
-
-                // Filter only connected clients
-                const activeClients = connections.filter(conn => conn.status === 'Connected');
-
-                if (activeClients.length === 0) {
+                
+                if (connections.length === 0) {
                     const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="4">No active connections found</td>`;
+                    const cell = document.createElement('td');
+                    cell.colSpan = 4;  // Adjusted for 4 columns
+                    cell.textContent = 'No connections found';
+                    row.appendChild(cell);
                     tbody.appendChild(row);
                 } else {
-                    activeClients.forEach(conn => {
+                    connections.forEach(conn => {
                         const row = document.createElement('tr');
+                        
+                        // Comprehensive status determination
+                        let statusLabel = "Unknown";
+                        let statusClass = "status-unknown";
+                        
+                        if (conn.status === "Disconnected") {
+                            statusLabel = "Disconnected";
+                            statusClass = "status-disconnected";
+                        } else if (conn.is_new) {
+                            statusLabel = "New Device";
+                            statusClass = "status-new";
+                        } else if (!conn.whitelisted) {
+                            statusLabel = "Suspicious";
+                            statusClass = "status-suspicious";
+                        } else if (conn.whitelisted) {
+                            statusLabel = "Trusted";
+                            statusClass = "status-safe";
+                        }
+                        
+                        // Determine first seen with intelligent formatting
+                        const firstSeenDisplay = conn.first_seen === "N/A"
+                            ? "Unknown"
+                            : new Date(conn.first_seen).toLocaleString();
+                        
+                        // Ensure RSSI is displayed correctly
+                        const signalStrength = typeof conn.rssi === 'number'
+                            ? `${conn.rssi} dBm`
+                            : conn.rssi;
+                        
+                        // Create cells for each piece of data
                         row.innerHTML = `
-                            <td>${conn.last_seen}</td>
+                            <td>${firstSeenDisplay}</td>
                             <td>${conn.mac}</td>
-                            <td>${conn.rssi}</td>
-                            <td><span class="status-safe">${conn.status}</span></td>
+                            <td>${signalStrength}</td>
+                            <td class="${statusClass}">${statusLabel}</td>
                         `;
+                        
                         tbody.appendChild(row);
                     });
                 }
-
-                // Update client count
-                document.getElementById('client-count').textContent = activeClients.length;
-
             } catch (error) {
                 console.error('Error loading user connections:', error);
-                displayError('Failed to load user connections');
+                
+                // Add an error row to the table
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;  // Adjusted for 4 columns
+                cell.textContent = `Error loading connections: ${error.message}`;
+                cell.classList.add('error-message');
+                row.appendChild(cell);
+                tbody.appendChild(row);
             }
         }
-
-
         // Load security alerts from alerts API
         async function loadSecurityAlerts(filter = 'all') {
             try {
+                // Update current filter if it's a user selection (not a refresh)
+                if (filter !== 'refresh') {
+                    currentFilter = filter;
+                }
+                
                 // Only refetch if we don't have data or forced refresh
                 if (!alertsData.length || filter === 'refresh') {
                     const response = await fetch('/api/logs/alerts');
                     alertsData = await response.json();
-                    filter = 'all'; // Reset to all after refresh
                 }
                 
                 const container = document.getElementById('alert-container');
@@ -641,16 +727,16 @@
                 
                 // Filter alerts by type if needed
                 let filteredAlerts = [...alertsData];
-                if (filter === 'deauth') {
+                if (currentFilter === 'deauth') {
                     filteredAlerts = alertsData.filter(alert => 
                         alert.message && alert.message.toLowerCase().includes('deauth'));
-                } else if (filter === 'evil-twin') {
+                } else if (currentFilter === 'evil-twin') {
                     filteredAlerts = alertsData.filter(alert => 
                         alert.message && alert.message.toLowerCase().includes('evil twin'));
                 }
                 
                 // Get most recent 5 alerts
-                const recentAlerts = filteredAlerts.slice(-5);
+                const recentAlerts = filteredAlerts.slice(-5).reverse();
                 
                 if (recentAlerts.length === 0) {
                     container.innerHTML = '<div class="alert-item">No alerts found</div>';
@@ -666,8 +752,25 @@
                         
                         // Set alert title based on type
                         let alertTitle = 'Security Alert';
-                        if (isDeauth) alertTitle = 'Deauthentication Attack';
-                        if (isEvilTwin) alertTitle = 'Evil Twin Attack';
+                        let pcapFileName = '';
+                        
+                        if (isDeauth) {
+                            alertTitle = 'Deauthentication Attack';
+                            // Extract timestamp for filename
+                            const timestampStr = alert.timestamp.replace(/[: -]/g, '_');
+                            const datePart = timestampStr.split('_').slice(0, 3).join('');
+                            const timePart = timestampStr.split('_').slice(3).join('');
+                            pcapFileName = `deauth_${datePart}_${timePart}.pcap`;
+                        }
+                        
+                        if (isEvilTwin) {
+                            alertTitle = 'Evil Twin Attack';
+                            // Extract timestamp for filename
+                            const timestampStr = alert.timestamp.replace(/[: -]/g, '_');
+                            const datePart = timestampStr.split('_').slice(0, 3).join('');
+                            const timePart = timestampStr.split('_').slice(3).join('');
+                            pcapFileName = `evil_twin_${datePart}_${timePart}.pcap`;
+                        }
                         
                         alertDiv.innerHTML = `
                             <div class="alert-details">
@@ -676,6 +779,9 @@
                                 <div class="alert-meta">
                                     <span class="alert-time">${alert.timestamp}</span>
                                     <span class="alert-severity ${alert.level === 'CRITICAL' ? 'critical' : 'warning'}">${alert.level}</span>
+                                    ${(isDeauth || isEvilTwin) ? 
+                                        `<button class="btn btn-small pcap-download" style="margin-left: 250px;" 
+                                        onclick="handlePcapDownload(event, '${pcapFileName}')">Download PCAP</button>` : ''}
                                 </div>
                             </div>
                         `;
@@ -689,7 +795,8 @@
                     btn.classList.remove('active');
                 });
                 
-                document.querySelector(`.filter-button[data-filter="${filter === 'refresh' ? 'all' : filter}"]`)?.classList.add('active');
+                document.querySelector(`.filter-button[data-filter="${currentFilter}"]`)?.classList.add('active');
+                
             } catch (error) {
                 console.error('Error loading security alerts:', error);
                 displayError('Failed to load security alerts');
@@ -736,7 +843,7 @@
         // Helper function to refresh all data
         function refreshAllData() {
             loadUserConnections();
-            loadSecurityAlerts('refresh');
+            loadSecurityAlerts('refresh'); // Will use the currentFilter variable internally
             loadNetworkInfo();
         }
 

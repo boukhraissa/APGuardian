@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Path to log files - determine dynamically based on script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-LOG_DIR = os.path.join(PROJECT_DIR, "detector", "logs")
+LOG_DIR = os.path.join(PROJECT_DIR,  "detector","logs")
 ALERTS_LOG = os.path.join(LOG_DIR, "alerts.log")
 INFO_LOG = os.path.join(LOG_DIR, "info.log")
 
@@ -154,57 +154,46 @@ def get_info_logs(max_entries: int = 100, force_refresh: bool = False) -> List[D
 
 def get_active_connections():
     """
-    Returns information about currently active client connections.
-    
-    Returns:
-        list: A list of dictionaries containing client connection information.
-              Each dictionary has:
-              - mac: Client's MAC address
-              - first_seen: When the client was first detected
-              - last_seen: Most recent client activity time
-              - rssi: Signal strength in dBm
-              - status: Connection status (Connected/Disconnected)
+    Returns information about currently active client connections,
+    including whitelisted and new-client status for frontend display.
     """
     try:
-        clients_log_path = CLIENTS_LOG_PATH  # Make sure this is defined at the top of the file
+        clients_log_path = CLIENTS_LOG_PATH  # Define this path globally
 
-        # Check if the clients log file exists
         if not os.path.exists(clients_log_path):
             logging.warning(f"Clients log file not found: {clients_log_path}")
             return []
-            
-        # Read the clients data from the JSON file
+        
         with open(clients_log_path, 'r') as f:
             clients_data = json.load(f)
-            
-        # Convert to the format expected by the frontend
+        
         formatted_clients = []
         for client in clients_data:
-            # Calculate how long ago the client was last seen
             try:
                 last_seen_time = datetime.fromisoformat(client['last_seen'])
                 current_time = datetime.now()
                 time_diff = (current_time - last_seen_time).total_seconds()
-                
-                # If last seen more than 5 minutes ago, consider disconnected
                 status = "Connected" if time_diff < 300 else "Disconnected"
             except (ValueError, TypeError):
-                # If there's an issue with time calculation, default to Connected
                 status = "Connected"
-                
+            
             formatted_client = {
                 'mac': client['mac'],
-                'first_seen': client['first_seen'],
-                'last_seen': client['last_seen'],
+                'first_seen': client.get('first_seen', "N/A"),
+                'last_seen': client.get('last_seen', "N/A"),
                 'rssi': client['rssi'] if isinstance(client['rssi'], str) else f"{client['rssi']} dBm",
-                'status': status
+                'status': status,
+                'whitelisted': client.get('whitelisted', False),
+                'is_new': client.get('is_new', True)
             }
             formatted_clients.append(formatted_client)
-            
+        
         return formatted_clients
+    
     except Exception as e:
         logging.error(f"Error getting active connections: {str(e)}")
         return []
+
 
 def refresh_log_cache(log_type: str = "all") -> None:
     """Update the log cache with latest log entries."""

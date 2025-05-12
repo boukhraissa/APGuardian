@@ -14,6 +14,7 @@ import threading
 import statistics  # Added for mean calculation
 import json
 import os
+import requests
 
 
 
@@ -59,7 +60,7 @@ root_logger.addHandler(console_handler)
 # ===== CONFIGURATION =====
 YOUR_AP_BSSID = "40:AE:30:2B:E8:0E"  # CHANGE TO YOUR AP's REAL BSSID
 AP_SSID = "TP-Link_E80E"
-YOUR_AP_CHANNEL =  3         # Your AP's channel
+YOUR_AP_CHANNEL =  2       # Your AP's channel
 INTERFACE = "wlan0mon"        # Your monitor interface
 CLIENTS_LOG_PATH = "/home/kali/Desktop/project_active/detector/logs/active_clients.log"
 # =========================
@@ -71,11 +72,9 @@ CLIENT_FLOOD_THRESHOLD = 20          # New clients/min
 RSSI_ANOMALY_THRESHOLD = 15          # dBm change from baseline
 BURST_THRESHOLD = 0.1                # Seconds between packets to consider a burst
 
-# Attack signatures
-COMMON_ATTACK_SSIDS = {
-    "Free WiFi", "Starbucks", "Airport_WiFi", "Hotel_Guest",
-    "attwifi", "xfinitywifi", "Google Starbucks", "Facebook WiFi"
-}
+# APGuardian telegram bot config
+BOT_TOKEN = '8197673232:AAHDLf5UvAJQ0zSyJJTanW_1B4uScXuxWIU'
+CHAT_ID = '1688882252'
 
 # Global variables
 deauth_counts = defaultdict(int)
@@ -83,6 +82,25 @@ packet_timestamps = defaultdict(deque)
 
 
 ### HELPER FUNCTIONS FOR DEAuth
+
+def send_telegram_alert(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"  # Optional: use Markdown formatting
+    }
+
+    try:
+        requests.post(url, data=data)
+    except Exception as e:
+        print(f"[!] Telegram send failed: {e}")
+
+def send_telegram_file(file_path, caption="Captured packets"):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+    with open(file_path, "rb") as f:
+        requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"document": f})
+
 def reset_counts():
     """Reset counters every 5 seconds"""
     global deauth_counts
@@ -118,14 +136,23 @@ class APGuardian:
         
         # Updated client data structure with status field
         self.connected_clients = []
+        self.whitelist = set()
         
         # Attack detectors
         self.fingerprint_learned = False
+        self.channel_updated = False
         self.real_fingerprint = {}
         self.deauth_counter = defaultdict(int)
         self.probe_counter = defaultdict(int)
+        self.client_activity = deque()  # Holds last 2 minutes of MAC+RSSI observations
+        self.attackers_address = set()  # Detected suspicious MACs via RSSI correlation
         self.client_flood_detector = deque(maxlen=60)
-        
+        self.evil_twin_detected = False
+        self.evil_twin_start_time = None
+        self.evil_twin_packets = []
+        self.deauth_attack_active = False
+        self.deauth_attack_start = None
+        self.deauth_packets = []
         # Last time clients were saved to file
         self.last_clients_save = time.time()
         
@@ -133,6 +160,49 @@ class APGuardian:
         self.set_monitor_channel()
 
 
+    def save_pcap(self, packets, attack_type):
+        """Save captured packets to a PCAP file"""
+        # Create pcaps directory if it doesn't exist
+        pcap_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "captures")
+        os.makedirs(pcap_dir, exist_ok=True)
+        
+        # Generate filename with timestampd
+        timestamp = (datetime.now()-timedelta(seconds=10)).strftime("%Y%m%d_%H%M%S")
+        filename = f"{attack_type}_{timestamp}.pcap"
+        filepath = os.path.join(pcap_dir, filename)
+        # Write packets to file
+        try:
+            wrpcap(filepath, packets)
+            logging.info(f"Saved PCAP file: {filename}")
+            send_telegram_file(file_path=filepath, caption = "Captured packets")
+            return filename
+        except Exception as e:
+            logging.error(f"Failed to save PCAP file: {e}")
+            return None
+
+    def capture_attack_packets(self, duration=10, attack_type="unknown"):
+        """Capture packets for a specified duration after attack detection"""
+        import threading
+        
+        def _capture_packets():
+            try:
+                # Capture packets for the specified duration
+                logging.info(f"Capturing {attack_type} attack traffic for {duration} seconds...")
+                packets = sniff(iface=INTERFACE, timeout=duration)
+                
+                # Save to PCAP file
+                if packets:
+                    self.save_pcap(packets, attack_type)
+                else:
+                    logging.warning("No packets captured during attack")
+            except Exception as e:
+                logging.error(f"Error capturing attack packets: {e}")
+        
+        # Start capture in a separate thread
+        capture_thread = threading.Thread(target=_capture_packets)
+        capture_thread.daemon = True
+        capture_thread.start()
+        
     def set_monitor_channel(self):
         # channel setting with interface verification
         max_retries = 3
@@ -149,6 +219,37 @@ class APGuardian:
                 logging.error(f"Channel set failed (attempt {attempt+1}/{max_retries}): {e.stderr.decode()}")
                 time.sleep(2)
         logging.error("Failed to set channel after multiple attempts!")
+
+    def update_ap_channel(self, pkt):
+        # Extracts the channel from a beacon frame
+        global YOUR_AP_CHANNEL
+
+        if not pkt.haslayer(Dot11Beacon):
+            return
+
+        bssid = pkt.addr2
+        elt = pkt.getlayer(Dot11Elt)
+
+        try:
+            ssid = elt.info.decode('utf-8', errors='ignore').strip()
+        except Exception:
+            return
+
+        if bssid.lower() != YOUR_AP_BSSID.lower() or ssid != AP_SSID:
+            return
+
+        current = elt
+        while isinstance(current, Dot11Elt):
+            if current.ID == 3:  # DS Parameter Set
+                try:
+                    channel = ord(current.info)
+                    YOUR_AP_CHANNEL = channel
+                    logging.info(f"[+] AP channel updated: {channel}")
+                    self.channel_updated = True
+                    return
+                except:
+                    return
+            current = current.payload
 
     def learn_ap_fingerprint(self, pkt):
         """Learn fingerprint of the real AP for later detection."""
@@ -167,29 +268,56 @@ class APGuardian:
             try:
                 interval = pkt[Dot11Beacon].beacon_interval
                 cap = pkt.sprintf("{Dot11Beacon: %Dot11Beacon.cap%}")
+                vendor_tag = None
+                channel = None
 
-                # Traverse Dot11Elt layers to find the one with ID == 3 (supported rates)
-                rates = b""
-                while isinstance(elt, Dot11Elt):
-                    if elt.ID == 3:
-                        rates = elt.info
-                        break
-                    elt = elt.payload
+                # Traverse all Dot11Elt layers
+                current = elt
+                while isinstance(current, Dot11Elt):
+                    if current.ID == 3:  # DS Parameter Set → Channel
+                        try:
+                            channel = ord(current.info)
+                        except:
+                            channel = None
+                    elif current.ID == 221:  # Vendor Specific
+                        vendor_tag = current.info.hex()
+                    current = current.payload
 
                 self.real_fingerprint = {
                     "interval": interval,
                     "capabilities": cap,
-                    "rates": rates
+                    "channel": channel,
+                    "vendor": vendor_tag
                 }
 
                 self.fingerprint_learned = True
                 logging.info(f"📡 Learned fingerprint for {ssid} ({bssid})")
-                logging.info(f"➡ Interval: {interval} | Capabilities: {cap} | Rates: {rates.hex()}")
+                logging.info(f"➡ Interval: {interval} | Capabilities: {cap} | Channel: {channel} | Vendor: {vendor_tag}")
+
             except Exception as e:
                 logging.error(f"Failed to learn fingerprint: {e}")
 
+
+    def analyze_recent_activity(self, attack_rssi, attack_time, tolerance=3, window=120):
+        """
+        Search for devices active near the attack time with similar RSSI.
+        """
+        suspects = set()
+        for entry in self.client_activity:
+            if abs(entry["rssi"] - attack_rssi) <= tolerance and (attack_time - entry["time"]) <= window:
+                suspects.add(entry["mac"])
+
+        self.attackers_address = suspects
+        if not suspects:
+            logging.info("NO SUSPECT DETCTED")
+        for mac in suspects:
+            send_telegram_alert(f"🚨[SUSPECT] {mac} matched deauth RSSI pattern")
+            logging.warning(f"[SUSPECT] {mac} matched deauth RSSI pattern")
+            with open("logs/alerts.log", "a") as f:
+                f.write(f"[SUSPECT] {mac} seen near deauth RSSI {attack_rssi}\n")
+    
     def detect_rogue_ap(self, pkt):
-        """Detect Evil Twin APs mimicking the real AP but with mismatched fingerprint."""
+        """Detect Evil Twin AP mimicking OUR AP but with mismatched fingerprint."""
         if not pkt.haslayer(Dot11Beacon):
             return
 
@@ -201,38 +329,28 @@ class APGuardian:
         except Exception:
             return
 
-        # Ignore unrelated SSIDs
+        # Skip unrelated SSIDs
         if ssid != self.ap_ssid:
             return
 
-        # Skip the legit AP itself
-        if bssid.lower() == self.ap_mac.lower():
-            return
-
-        # Skip if we haven't learned the real fingerprint yet
         if not self.fingerprint_learned:
             return
 
-        # Extract fingerprint from current beacon
         try:
             interval = pkt[Dot11Beacon].beacon_interval
             cap = pkt.sprintf("{Dot11Beacon: %Dot11Beacon.cap%}")
-
-            # Traverse Dot11Elt to get Supported Rates (ID=1) and Channel (ID=3 or ID=7)
-            rates = b""
             channel = None
+            vendor_tag = None
             current = elt
 
             while isinstance(current, Dot11Elt):
-                if current.ID == 3:  # DS Parameter Set (Channel)
+                if current.ID == 3:
                     try:
                         channel = ord(current.info)
                     except:
                         channel = None
-                elif current.ID == 7:  # Country Info or HT Operation (channel might be here too)
-                    pass
-                elif current.ID == 1:  # Supported rates
-                    rates = current.info
+                elif current.ID == 221:
+                    vendor_tag = current.info.hex()
                 current = current.payload
 
         except Exception as e:
@@ -240,24 +358,36 @@ class APGuardian:
             return
 
         mismatch = []
-        print(f"{ssid}, {interval}, {cap}, {rates}")
         real_fp = self.real_fingerprint
-        if ssid != self.ap_ssid:
-            mismatch.append("SSID")
-        if bssid.lower() == self.ap_mac.lower():
-            mismatch.append("BSSID (should not match legit)")
+
+        # Only react to beacons pretending to be OUR BSSID
+        if bssid.lower() != YOUR_AP_BSSID.lower():
+            mismatch.append("BSSID")
         if interval != real_fp.get("interval"):
             mismatch.append("interval")
         if cap != real_fp.get("capabilities"):
             mismatch.append("capabilities")
-        if rates != real_fp.get("rates"):
-            mismatch.append("rates")
         if channel and real_fp.get("channel") and channel != real_fp.get("channel"):
             mismatch.append("channel")
+        if vendor_tag != real_fp.get("vendor"):
+            mismatch.append("vendor tag")
+
         if mismatch:
-            logging.critical(f"EVIL TWIN DETECTED | BSSID: {bssid} | SSID: {ssid} | Mismatches: {', '.join(mismatch)}")
+            now = time.time()
 
+            if not self.evil_twin_detected:
+                self.evil_twin_detected = True
+                self.evil_twin_start_time = now
+                self.evil_twin_packets = [pkt]
 
+                logging.critical(
+                    f"EVIL TWIN DETECTED | BSSID: {bssid} | SSID: {ssid} | Mismatches: {', '.join(mismatch)}"
+                )
+                self.capture_attack_packets(duration=10, attack_type="evil_twin")
+                send_telegram_alert("🚨 *Evil twin Attack Detected!* Check logs and saved PCAP.")
+            elif now - self.evil_twin_start_time > 120:
+                self.evil_twin_detected = False
+                
     def detect_deauth_attack(self, pkt):
         """Enhanced deauth detection combining both approaches"""
         if not pkt.haslayer(Dot11Deauth):
@@ -295,14 +425,42 @@ class APGuardian:
                 f"count: {self.deauth_counter[claimed_src]})"
             )
 
-        # Rule 3: Threshold detection
+        # Rule 3: Threshold detection 
         if self.deauth_counter[claimed_src] == DEAUTH_THRESHOLD:
+        # and rssi is not None:
+            # print(f"\n{rssi}\n") 
+            # print("RSSI KAYNE")
+            # self.analyze_recent_activity(rssi, now)
+        
+
+            self.capture_attack_packets(duration=10, attack_type="deauth")
+            send_telegram_alert("🚨 *Deauth Attack Detected!* Check logs and saved PCAP.")
             logging.critical(
-                f"DEAUTH ATTACK DETECTED!\n"
-                f"  Claimed source: {claimed_src}\n"
-                f"  Attacker mac: {attacker_mac}\n"
+                f"DEAUTH ATTACK DETECTED!"
+                f"  Claimed source: {claimed_src}"
+                f"  Attacker mac: {attacker_mac}"
                 f"  Target: {dst_mac}"
             )
+        #capturing packets for forensics    
+        # if self.deauth_attack_active:
+        #     if now - self.deauth_attack_start <= 10:
+        #         self.deauth_packets.append(pkt)
+        #     else:
+        #         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        #         capture_dir = os.path.join(os.path.dirname(__file__), "captures")
+        #         os.makedirs(capture_dir, exist_ok=True)
+        #         pcap_path = os.path.join(capture_dir, f"deauth attack {timestamp}.pcap")
+
+        #         try:
+        #             wrpcap(pcap_path, self.deauth_packets)
+        #             logging.info(f"[+] Saved deauth attack capture to: {pcap_path}")
+        #         except Exception as e:
+        #             logging.error(f"[!] Failed to save deauth pcap: {e}")
+
+        #         # Cleanup
+        #         self.deauth_attack_active = False
+        #         self.deauth_attack_start = None
+        #         self.deauth_packets = []
 
     def find_client_by_mac(self, mac):
         """Helper method to find a client by MAC address in the new data structure"""
@@ -433,42 +591,119 @@ class APGuardian:
         self.connected_clients = [client for client in self.connected_clients if client['mac'] != client_mac]
 
 
+
+    def load_whitelist(self, filepath=None):
+        """
+        Load whitelist from a file, creating the file if it doesn't exist.
+        
+        Args:
+            filepath (str, optional): Path to the whitelist file. 
+                                      Defaults to ./logs/whitelist.txt
+        """
+        # Ensure logs directory exists
+        logs_dir = os.path.join(os.getcwd(), "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+
+        # Default filepath if not provided
+        if filepath is None:
+            filepath = os.path.join(logs_dir, "whitelist.txt")
+
+        try:
+            # Create the file if it doesn't exist
+            if not os.path.exists(filepath):
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    logging.info(f"Created new whitelist file at {filepath}")
+                # Initialize with an empty set
+                self.whitelist = set()
+                return
+
+            # Read the file
+            with open(filepath, 'r', encoding='utf-8') as f:
+                # Validate MAC address format while reading
+                self.whitelist = set()
+                for line in f:
+                    mac = line.strip().lower()
+                    # Simple MAC address format validation
+                    if mac and self._is_valid_mac(mac):
+                        self.whitelist.add(mac)
+                    elif mac:
+                        logging.warning(f"Invalid MAC address format: {mac}")
+
+            logging.info(f"Loaded whitelist with {len(self.whitelist)} valid entries from {filepath}")
+
+        except IOError as e:
+            logging.error(f"IO Error reading whitelist file {filepath}: {e}")
+            self.whitelist = set()
+        except Exception as e:
+            logging.error(f"Unexpected error loading whitelist: {e}")
+            self.whitelist = set()
+
+    def _is_valid_mac(self, mac):
+        """
+        Validate MAC address format.
+        
+        Args:
+            mac (str): MAC address to validate
+        
+        Returns:
+            bool: True if MAC address is valid, False otherwise
+        """
+        # Regular MAC address formats:
+        # 1. XX:XX:XX:XX:XX:XX
+        # 2. XX-XX-XX-XX-XX-XX
+        # 3. XXXXXXXXXXXX
+        import re
+        mac_regex = r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{12})$'
+        return re.match(mac_regex, mac) is not None
+    
     def _update_client_state(self, client_mac, current_time, rssi_str, status, frame_type):
         """
-        Helper method to update client state based on observed frames
+        helper method to update client state, detect new clients,
+        and flag untrusted devices.
         """
         existing_client = self.find_client_by_mac(client_mac)
-        
+        self.load_whitelist()
+        # print(f"\n{self.whitelist}\n")
+        is_whitelisted = client_mac in self.whitelist
         if not existing_client:
-            # Add new client
+            # New client detected
             new_client = {
                 'mac': client_mac,
                 'first_seen': current_time,
                 'last_seen': current_time,
                 'rssi': rssi_str,
-                'status': status
+                'status': status,
+                'whitelisted': is_whitelisted,
+                'is_new': True
             }
             self.connected_clients.append(new_client)
+
+            # Log & alert if not trusted
             self._log_client_event(client_mac, f"NEW {status}", rssi_str, "", "", frame_type)
+            if not is_whitelisted:
+                logging.warning(f"New untrusted client detected: {client_mac}")
+                send_telegram_alert(f"⚠️ *Untrusted Client Connected!*\nMAC: `{client_mac}`\nStatus: `{status}`")
+
         else:
-            # Update existing client
+            # Update existing client info
             existing_client['last_seen'] = current_time
             if rssi_str != "N/A":
                 existing_client['rssi'] = rssi_str
-                
-            # Only upgrade status (Authenticated -> Associated -> Connected)
+            existing_client['is_new'] = False  # It's no longer new
+
+            # Status promotion logic
             status_hierarchy = {
                 "Disconnected": 0,
                 "Authenticated": 1,
                 "Associated": 2,
                 "Connected": 3
             }
-            
             current_status = existing_client['status']
             if status_hierarchy.get(status, 0) > status_hierarchy.get(current_status, 0):
                 existing_client['status'] = status
                 self._log_client_event(client_mac, f"STATUS CHANGE: {current_status} -> {status}", 
                                     rssi_str, "", "", frame_type)
+
                                     
     def _log_client_event(self, mac, event, rssi_str, src, dst, frame_type):
         """Log client events to info.log and console"""
@@ -498,19 +733,38 @@ class APGuardian:
     def packet_handler(self, pkt):
         """Main packet processing function"""
         try:
+            if not self.channel_updated:
+                self.update_ap_channel(pkt)
             if not self.fingerprint_learned:
                 self.learn_ap_fingerprint(pkt)
             # Verify channel every 5 minutes
             if time.time() - self.last_channel_check > 300:
                 self.set_monitor_channel()
                 self.last_channel_check = time.time()
-                
+               
             # Check if it's time to save client data (every second)
             current_time = time.time()
             if current_time - self.last_clients_save >= 1.0:
                 self.save_clients_to_file()
                 self.last_clients_save = current_time
 
+            now = time.time()
+            if pkt.haslayer(Dot11) and pkt.haslayer(RadioTap):
+                mac = pkt.addr2.lower() if pkt.addr2 else None
+                rssi = getattr(pkt[RadioTap], 'dBm_AntSignal', None)
+                frame_type = pkt.subtype if hasattr(pkt, 'subtype') else 'unknown'
+
+                if mac and rssi is not None:
+                    self.client_activity.append({
+                        "mac": mac,
+                        "rssi": rssi,
+                        "time": now,
+                        "frame_type": frame_type
+                    })
+
+            # Remove entries older than 2 minutes
+            while self.client_activity and now - self.client_activity[0]["time"] > 120:
+                self.client_activity.popleft()
             # Run all detectors
             self.detect_rogue_ap(pkt)
             self.detect_deauth_attack(pkt)
@@ -601,7 +855,6 @@ def main():
         logging.warning("Running with reduced capabilities")
     
     guardian = APGuardian()
-    
     try:
         logging.info("Beginning focused monitoring...")
         # Start packet sniffing in a daemon thread
