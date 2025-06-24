@@ -1,0 +1,4 @@
+2025-05-14 12:55:22,569 - WARNING - Not on channel 4! Detection may fail
+2025-05-14 12:56:19,153 - WARNING - New untrusted client detected: ea:ec:37:b5:ae:60
+2025-05-14 12:57:17,737 - CRITICAL - EVIL TWIN DETECTED | BSSID: 40:ae:30:2b:e8:0e | SSID: TP-Link_E80E | Mismatches: interval, capabilities, channel, vendor tag
+2025-05-14 12:59:11,263 - CRITICAL - DEAUTH ATTACK DETECTED!  Claimed source: 40:ae:30:2b:e8:0e  Attacker mac: unknown  Target: 56:78:63:23:53:63

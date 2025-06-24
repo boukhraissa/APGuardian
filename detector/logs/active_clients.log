@@ -1,11 +1,11 @@
 [
   {
-    "mac": "56:78:63:23:53:63",
-    "first_seen": "2025-05-12 17:57:52",
-    "last_seen": "2025-05-12 17:57:52",
+    "mac": "ea:ec:37:b5:ae:60",
+    "first_seen": "2025-05-14 12:56:19",
+    "last_seen": "2025-05-14 12:56:21",
     "rssi": "-42 dBm",
-    "status": "Associated",
-    "whitelisted": true,
+    "status": "Connected",
+    "whitelisted": false,
     "is_new": false
   }
 ]

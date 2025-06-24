@@ -60,7 +60,7 @@ root_logger.addHandler(console_handler)
 # ===== CONFIGURATION =====
 YOUR_AP_BSSID = "40:AE:30:2B:E8:0E"  # CHANGE TO YOUR AP's REAL BSSID
 AP_SSID = "TP-Link_E80E"
-YOUR_AP_CHANNEL =  2       # Your AP's channel
+YOUR_AP_CHANNEL =  4       # Your AP's channel
 INTERFACE = "wlan0mon"        # Your monitor interface
 CLIENTS_LOG_PATH = "/home/kali/Desktop/project_active/detector/logs/active_clients.log"
 # =========================

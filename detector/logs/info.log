@@ -1,0 +1,64 @@
+2025-05-14 12:48:41,371 - INFO - Starting AP Guardian for BSSID: 40:AE:30:2B:E8:0E
+2025-05-14 12:48:41,398 - INFO - Interface wlan0mon reset to channel 4
+2025-05-14 12:48:41,399 - INFO - Beginning focused monitoring...
+2025-05-14 12:48:41,473 - INFO - [+] AP channel updated: 4
+2025-05-14 12:48:41,474 - INFO - 📡 Learned fingerprint for TP-Link_E80E (40:ae:30:2b:e8:0e)
+2025-05-14 12:48:41,475 - INFO - ➡ Interval: 100 | Capabilities:  short-slot+ESS+privacy | Channel: 4 | Vendor: 000c4300000000
+2025-05-14 12:48:43,531 - INFO - Stopping AP Guardian
+2025-05-14 12:55:22,566 - INFO - Starting AP Guardian for BSSID: 40:AE:30:2B:E8:0E
+2025-05-14 12:55:22,598 - INFO - Interface wlan0mon reset to channel 4
+2025-05-14 12:55:22,599 - INFO - Beginning focused monitoring...
+2025-05-14 12:55:22,691 - INFO - [+] AP channel updated: 4
+2025-05-14 12:55:22,692 - INFO - 📡 Learned fingerprint for TP-Link_E80E (40:ae:30:2b:e8:0e)
+2025-05-14 12:55:22,692 - INFO - ➡ Interval: 100 | Capabilities:  short-slot+ESS+privacy | Channel: 4 | Vendor: 000c4300000000
+2025-05-14 12:55:53,220 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:55:53,221 - INFO - CLIENT NEW AUTHENTICATED | MAC: 56:78:63:23:53:63 | RSSI: -44 dBm | Frame: AUTH | Path:  → 
+2025-05-14 12:55:53,231 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:55:53,270 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:55:53,270 - INFO - CLIENT STATUS CHANGE: AUTHENTICATED -> ASSOCIATED | MAC: 56:78:63:23:53:63 | RSSI: -45 dBm | Frame: ASSOC | Path:  → 
+2025-05-14 12:55:53,274 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:55:53,276 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:55:53,288 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:56:19,152 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:56:19,153 - INFO - CLIENT NEW ASSOCIATED | MAC: ea:ec:37:b5:ae:60 | RSSI: -46 dBm | Frame: ASSOC | Path:  → 
+2025-05-14 12:56:20,627 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:56:20,642 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:56:21,073 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:56:21,074 - INFO - CLIENT STATUS CHANGE: ASSOCIATED -> CONNECTED | MAC: ea:ec:37:b5:ae:60 | RSSI: -42 dBm | Frame: DATA | Path:  → 
+2025-05-14 12:57:17,737 - INFO - Capturing evil_twin attack traffic for 10 seconds...
+2025-05-14 12:57:28,657 - INFO - Saved PCAP file: evil_twin_20250514_125717.pcap
+2025-05-14 12:59:05,216 - INFO - CLIENT DISCONNECTED | MAC: 56:78:63:23:53:63 | RSSI: N/A | Frame: DEAUTH | Path: 40:ae:30:2b:e8:0e → 56:78:63:23:53:63
+2025-05-14 12:59:05,439 - INFO - Capturing deauth attack traffic for 10 seconds...
+2025-05-14 12:59:13,991 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:13,991 - INFO - CLIENT NEW AUTHENTICATED | MAC: 56:78:63:23:53:63 | RSSI: -48 dBm | Frame: AUTH | Path:  → 
+2025-05-14 12:59:13,993 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,047 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,049 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,143 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,174 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,175 - INFO - CLIENT STATUS CHANGE: AUTHENTICATED -> ASSOCIATED | MAC: 56:78:63:23:53:63 | RSSI: -43 dBm | Frame: ASSOC | Path:  → 
+2025-05-14 12:59:14,179 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,210 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,212 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,215 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:14,500 - INFO - CLIENT DISCONNECTED | MAC: 56:78:63:23:53:63 | RSSI: N/A | Frame: DEAUTH | Path: 40:ae:30:2b:e8:0e → 56:78:63:23:53:63
+2025-05-14 12:59:16,345 - INFO - Saved PCAP file: deauth_20250514_125905.pcap
+2025-05-14 12:59:28,742 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,743 - INFO - CLIENT NEW AUTHENTICATED | MAC: 56:78:63:23:53:63 | RSSI: -50 dBm | Frame: AUTH | Path:  → 
+2025-05-14 12:59:28,747 - INFO - CLIENT DISCONNECTED | MAC: 56:78:63:23:53:63 | RSSI: N/A | Frame: DEAUTH | Path: 40:ae:30:2b:e8:0e → 56:78:63:23:53:63
+2025-05-14 12:59:28,749 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,749 - INFO - CLIENT NEW AUTHENTICATED | MAC: 56:78:63:23:53:63 | RSSI: -49 dBm | Frame: AUTH | Path:  → 
+2025-05-14 12:59:28,763 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,763 - INFO - CLIENT STATUS CHANGE: AUTHENTICATED -> ASSOCIATED | MAC: 56:78:63:23:53:63 | RSSI: -45 dBm | Frame: ASSOC | Path:  → 
+2025-05-14 12:59:28,768 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,775 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,777 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:28,794 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:29,893 - INFO - CLIENT DISCONNECTED | MAC: 56:78:63:23:53:63 | RSSI: N/A | Frame: DEAUTH | Path: 40:ae:30:2b:e8:0e → 56:78:63:23:53:63
+2025-05-14 12:59:43,092 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:43,092 - INFO - CLIENT NEW AUTHENTICATED | MAC: 56:78:63:23:53:63 | RSSI: -48 dBm | Frame: AUTH | Path:  → 
+2025-05-14 12:59:43,107 - INFO - Loaded whitelist with 2 valid entries from /home/kali/Desktop/project_active/detector/logs/whitelist.txt
+2025-05-14 12:59:43,107 - INFO - CLIENT STATUS CHANGE: AUTHENTICATED -> ASSOCIATED | MAC: 56:78:63:23:53:63 | RSSI: -48 dBm | Frame: ASSOC | Path:  → 
+2025-05-14 12:59:43,116 - INFO - CLIENT DISCONNECTED | MAC: 56:78:63:23:53:63 | RSSI: N/A | Frame: DEAUTH | Path: 40:ae:30:2b:e8:0e → 56:78:63:23:53:63
+2025-05-14 13:00:22,600 - INFO - Interface wlan0mon reset to channel 4
+2025-05-14 13:00:39,562 - INFO - Stopping AP Guardian
