@@ -1,6 +1,6 @@
 :root {
     --bg-primary: #0f172a;
-    --bg-secondary: #1e293b;
+    --bg-secondary: #1c283b;
     --text-primary: #e2e8f0;
     --text-secondary: #94a3b8;
     --accent: #3b82f6;
@@ -33,10 +33,10 @@ body {
 }
 
 .header {
-    display: flex;
-    justify-content: space-between;
+    display:flex;
+    justify-content:space-between;
     align-items: center;
-    padding: 1rem 0;
+    padding: 0.7rem 0;
     border-bottom: 1px solid var(--border);
     margin-bottom: 1rem;
 }
@@ -71,8 +71,6 @@ body {
 
 .status-indicator.active {
     background-color: var(--safe);
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
-    animation: pulse 2s infinite;
 }
 
 .main-grid {
@@ -284,7 +282,6 @@ body {
     background-color: rgba(15, 23, 42, 0.5);
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
     margin: 0 auto;
-    overflow: hidden;
 }
 
 .fingerprint-dot {
@@ -349,18 +346,48 @@ body {
     gap: 0.5rem;
 }
 
-/* Loading spinner */
-.loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid rgba(59, 130, 246, 0.3);
-    border-radius: 50%;
-    border-top-color: var(--accent);
-    animation: spin 1s ease-in-out infinite;
+.filter-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
 }
 
-/* Animations */
+.filter-button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 0.25rem;
+    cursor: pointer;
+}
+
+.filter-button.active {
+    background-color: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.error-message {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-left: 4px solid var(--danger);
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border-radius: 0.25rem;
+    color: var(--danger);
+    display: none;
+}
+
+.status-safe {
+    color: green;
+    font-weight: bold;
+}
+
+.status-suspicious {
+    color: red;
+    font-weight: bold;
+}
+
 @keyframes pulse {
     0% {
         transform: scale(1);
@@ -379,49 +406,4 @@ body {
     100% {
         opacity: 0.5;
     }
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Toast notification */
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 0.75rem 1rem;
-    background-color: var(--bg-secondary);
-    color: var(--text-primary);
-    border-radius: 0.375rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transform: translateY(100px);
-    opacity: 0;
-    transition: all 0.3s ease;
-}
-
-.toast.show {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-.toast-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    background-color: var(--accent);
-    border-radius: 50%;
-    color: white;
-    font-size: 0.875rem;
-    font-weight: bold;
-}
-
-.toast-message {
-    font-size: 0.875rem;
 }
